@@ -737,7 +737,8 @@ class BaseDataset(Dataset):
             raise TypeError('indices should be a int or sequence of int, '
                             f'but got {type(indices)}')
         return sub_data_list
-
+# 序列化数据 节省内存
+# https://mmengine.readthedocs.io/zh_CN/latest/advanced_tutorials/basedataset.html?highlight=serialize#id10
     def _serialize_data(self) -> Tuple[np.ndarray, np.ndarray]:
         """Serialize ``self.data_list`` to save memory when launching multiple
         workers in data loading. This function will be called in ``full_init``.

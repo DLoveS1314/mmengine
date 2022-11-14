@@ -19,7 +19,7 @@ class BaseLoop(metaclass=ABCMeta):
 
     def __init__(self, runner, dataloader: Union[DataLoader, Dict]) -> None:
         self._runner = runner
-        if isinstance(dataloader, dict):
+        if isinstance(dataloader, dict):##懒加载的特性 只有使用的时候再去加载 加载完成后就留在内存看
             # Determine whether or not different ranks use different seed.
             diff_rank_seed = runner._randomness_cfg.get(
                 'diff_rank_seed', False)

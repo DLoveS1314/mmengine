@@ -276,7 +276,7 @@ class Runner:
         else:
             self.cfg = Config(dict())
 
-        # lazy initialization
+        # lazy initialization  存的都是字典对象
         training_related = [train_dataloader, train_cfg, optim_wrapper]
         if not (all(item is None for item in training_related)
                 or all(item is not None for item in training_related)):
@@ -1631,7 +1631,7 @@ class Runner:
         # `build_optimizer` should be called before `build_param_scheduler`
         #  because the latter depends on the former
         self.optim_wrapper = self.build_optim_wrapper(self.optim_wrapper)
-        # Automatically scaling lr by linear scaling rule
+        # Automatically scaling lr by linear scaling rule 自动调整初始学习率 根据batch大小  auto_scale_lr是启动条件
         self.scale_lr(self.optim_wrapper, self.auto_scale_lr)
 
         if self.param_schedulers is not None:
