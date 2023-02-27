@@ -290,7 +290,7 @@ class BaseDataset(Dataset):
               filter_cfg.
             - slice_data: Slice dataset according to ``self._indices``
             - serialize_data: Serialize ``self.data_list`` if
-            ``self.serialize_data`` is True.
+              ``self.serialize_data`` is True.
         """
         if self._fully_initialized:
             return
@@ -420,7 +420,7 @@ class BaseDataset(Dataset):
         """Load annotations from an annotation file named as ``self.ann_file``
 
         If the annotation file does not follow `OpenMMLab 2.0 format dataset
-        <https://github.com/open-mmlab/mmengine/blob/main/docs/zh_cn/tutorials/basedataset.md>`_ .
+        <https://mmengine.readthedocs.io/en/latest/advanced_tutorials/basedataset.html>`_ .
         The subclass must override this method for load annotations. The meta
         information of annotation file will be overwritten :attr:`METAINFO`
         and ``metainfo`` argument of constructor.
@@ -548,7 +548,7 @@ class BaseDataset(Dataset):
 
     @force_full_init
     def get_subset_(self, indices: Union[Sequence[int], int]) -> None:
-        """The in-place version of  ``get_subset `` to convert dataset to a
+        """The in-place version of ``get_subset`` to convert dataset to a
         subset of original dataset.
 
         This method will convert the original dataset to a subset of dataset.
@@ -714,9 +714,9 @@ class BaseDataset(Dataset):
         Args:
             indices (int or Sequence[int]): If type of indices is int,
                 indices represents the first or last few data of data
-                information. If  indices of indices is Sequence, indices
-                represents the target data information index which consist
-                of subset data information.
+                information. If type of indices is Sequence, indices represents
+                the target data information index which consist of subset data
+                information.
 
         Returns:
             Tuple[np.ndarray, np.ndarray]: subset of data information.
