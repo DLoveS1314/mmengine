@@ -15,6 +15,12 @@ from .data_preprocessor import BaseDataPreprocessor
 
 class BaseModel(BaseModule):
     """Base class for all algorithmic models.
+    
+    在训练深度学习任务时，我们通常需要定义一个模型来实现算法的主体。在基于 MMEngine 开发时，定义的模型由执行器管理，
+    且需要实现 train_step、val_step 和 test_step 方法。 
+    对于检测、识别、分割一类的深度学习任务，上述方法通常为标准的流程，
+    例如在 train_step 里更新参数，返回损失；val_step 和 test_step 
+    返回预测结果。因此 MMEngine 抽象出模型基类 BaseModel ，实现了上述接口的标准流程。
 
     BaseModel implements the basic functions of the algorithmic model, such as
     weights initialize, batch inputs preprocess(see more information in
@@ -83,7 +89,9 @@ class BaseModel(BaseModule):
 
     def train_step(self, data: Union[dict, tuple, list],
                    optim_wrapper: OptimWrapper) -> Dict[str, torch.Tensor]:
-        """Implements the default model training process including
+        """
+        把训练流程抽象成 1、2、3、4步骤 继承它的类 只需要实现想用的forward即可
+        Implements the default model training process including
         preprocessing, model forward propagation, loss calculation,
         optimization, and back-propagation.
 

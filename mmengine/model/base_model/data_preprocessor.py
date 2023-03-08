@@ -234,6 +234,7 @@ class ImgDataPreprocessor(BaseDataPreprocessor):
         Returns:
             dict or list: Data in the same format as the model input.
         """
+        # 先把数据搬运到gpu uint数据比float快
         data = self.cast_data(data)  # type: ignore
         _batch_inputs = data['inputs']
         # Process data with `pseudo_collate`.
@@ -265,7 +266,7 @@ class ImgDataPreprocessor(BaseDataPreprocessor):
                 'The input of `ImgDataPreprocessor` should be a NCHW tensor '
                 'or a list of tensor, but got a tensor with shape: '
                 f'{_batch_inputs.shape}')
-            if self._channel_conversion:
+            if self._channel_conversion:#是否进行rgb转换 默认为false
                 _batch_inputs = _batch_inputs[:, [2, 1, 0], ...]
             # Convert to float after channel conversion to ensure
             # efficiency
@@ -286,5 +287,7 @@ class ImgDataPreprocessor(BaseDataPreprocessor):
                             'list/tuple with inputs and data_samples, '
                             f'but got {type(data)}： {data}')
         data['inputs'] = batch_inputs
+        ## 为了防止没有‘data_samples’ 参数而导致后续的问题 这里加了一句setdefault
+        #  如果字典中已经存在这个key，setdefault不会修改key原来的值，而且该方法会返回key原来的值
         data.setdefault('data_samples', None)
         return data

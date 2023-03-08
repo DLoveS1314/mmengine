@@ -391,9 +391,13 @@ class Runner:
         # flag to mark whether checkpoint has been loaded or resumed
         self._has_loaded = False
 
-        # build a model
+        # build a model data_preprocessor赋值的地方
         if isinstance(model, dict) and data_preprocessor is not None:
-            # Merge the data_preprocessor to model config.
+            # Merge the data_preprocessor to model config.把data_preprocessor合并到model参数里 为什么不直接写在里面呢
+            # 我猜测是因为两个太不相关了 所以在config上故意分离开以做提示 data_preprocessor 在dataset里 
+            # model由单独属于model的config
+            # 其实 data_preprocessor 是随着model初始化的
+            # https://mmengine.readthedocs.io/zh_CN/latest/tutorials/model.html
             model.setdefault('data_preprocessor', data_preprocessor)
         self.model = self.build_model(model)
         # wrap model

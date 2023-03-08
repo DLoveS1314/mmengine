@@ -101,7 +101,7 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
 
         module_name = self.__class__.__name__
         if not self._is_init:
-            if self.init_cfg:
+            if self.init_cfg:##如果存在初始化参数 就初始化
                 print_log(
                     f'initialize {module_name} with init_cfg {self.init_cfg}',
                     logger=logger_name,
