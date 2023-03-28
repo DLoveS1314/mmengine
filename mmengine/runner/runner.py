@@ -806,7 +806,7 @@ class Runner:
         else:
             raise TypeError('model should be a nn.Module object or dict, '
                             f'but got {model}')
-
+# 在这个模型里 model被送入 gpu 设备
     def wrap_model(
             self, model_wrapper_cfg: Optional[Dict],
             model: nn.Module) -> Union[DistributedDataParallel, nn.Module]:

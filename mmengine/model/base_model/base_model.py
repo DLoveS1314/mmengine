@@ -116,7 +116,8 @@ class BaseModel(BaseModule):
         Returns:
             Dict[str, torch.Tensor]: A ``dict`` of tensor for logging.
         """
-        # Enable automatic mixed precision training context.
+        # Enable automatic mixed precision training context.此时传的
+        # data 是
         with optim_wrapper.optim_context(self):
             data = self.data_preprocessor(data, True)
             losses = self._run_forward(data, mode='loss')  # type: ignore

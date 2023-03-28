@@ -236,7 +236,7 @@ class ImgDataPreprocessor(BaseDataPreprocessor):
         """
         # 先把数据搬运到gpu uint数据比float快
         data = self.cast_data(data)  # type: ignore
-        _batch_inputs = data['inputs']
+        _batch_inputs = data['inputs']#提取data中的inputs,data是经过pipline特别是PackClsInputs 之后的数据
         # Process data with `pseudo_collate`.
         if is_seq_of(_batch_inputs, torch.Tensor):
             batch_inputs = []
