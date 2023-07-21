@@ -395,13 +395,13 @@ class CheckpointHook(Hook):
                 best_score = self.init_value_map[rule]
             else:
                 best_score = runner.message_hub.get_info(best_score_key)
-
+            # 如果 当前值小于最小值 或者当前值是None呢么则跳过 is_better_than是一个根据rule_map生成的比大小的函数
             if key_score is None or not self.is_better_than[key_indicator](
                     key_score, best_score):
                 continue
 
             best_score = key_score
-            runner.message_hub.update_info(best_score_key, best_score)
+            runner.message_hub.update_info(best_score_key, best_score)#更新到message_hub中 预测update_info是有这个字典字符串就更新值 没有就直接创建一个
 
             if best_ckpt_path and \
                self.file_client.isfile(best_ckpt_path) and \
@@ -412,6 +412,8 @@ class CheckpointHook(Hook):
                     'is removed')
 
             best_ckpt_name = f'best_{key_indicator}_{ckpt_filename}'
+            #最终存储的名称 有点不太灵活呀 想再加个值都不好加 只好自己再重新继承一个了 因为key_indicator是default_prefix/item 所以又算一层文件夹
+            # 最终的保存结果会在out_dir/default_prefix里
             if len(self.key_indicators) == 1:
                 self.best_ckpt_path = self.file_client.join_path(  # type: ignore # noqa: E501
                     self.out_dir, best_ckpt_name)

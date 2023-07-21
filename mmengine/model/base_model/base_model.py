@@ -117,7 +117,9 @@ class BaseModel(BaseModule):
             Dict[str, torch.Tensor]: A ``dict`` of tensor for logging.
         """
         # Enable automatic mixed precision training context.此时传的
-        # data 是
+        # data  
+        #  data_preprocessor 数据的归一化 并把数据搬到GPU上 或者说把数据搬到和model一样的device上
+
         with optim_wrapper.optim_context(self):
             data = self.data_preprocessor(data, True)
             losses = self._run_forward(data, mode='loss')  # type: ignore
@@ -256,7 +258,8 @@ class BaseModel(BaseModule):
 
     def _set_device(self, device: torch.device) -> None:
         """Recursively set device for `BaseDataPreprocessor` instance.
-
+        # 递归的给是 BaseDataPreprocessor类型的类的 _device 进行赋值 赋值与model的寄过相同
+        这个 _device 用于BaseDataPreprocessor类forward时进行数据设备搬运
         Args:
             device (torch.device): the desired device of the parameters and
                 buffers in this module.
@@ -327,7 +330,7 @@ class BaseModel(BaseModule):
         Args:
             data (dict or tuple or list): Data sampled from dataset.
             mode (str): Mode of forward.
-
+            这里把 input 和datasamples 解箱
         Returns:
             dict or list: Results of training or testing mode.
         """

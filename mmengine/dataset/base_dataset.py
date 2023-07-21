@@ -515,7 +515,7 @@ class BaseDataset(Dataset):
 
     def _join_prefix(self):
         """Join ``self.data_root`` with ``self.data_prefix`` and
-        ``self.ann_file``.
+        ``self.ann_file``. 把标注文件和图片文件设置为绝对路径
 
         Examples:
             >>> # self.data_prefix contains relative paths
@@ -538,7 +538,7 @@ class BaseDataset(Dataset):
             'a/b/c/f'
         """
         # Automatically join annotation file path with `self.root` if
-        # `self.ann_file` is not an absolute path.
+        # `self.ann_file` is not an absolute path. 
         if not is_abs(self.ann_file) and self.ann_file:
             self.ann_file = osp.join(self.data_root, self.ann_file)
         # Automatically join data directory with `self.root` if path value in

@@ -77,7 +77,7 @@ class EarlyStoppingHook(Hook):
             rule = 'greater'
         elif monitor_lc in less_keys:
             rule = 'less'
-        elif any(key in monitor_lc for key in greater_keys):
+        elif any(key in monitor_lc for key in greater_keys):#使用accuracy/top1这种monitor的时候，会跳到这里
             rule = 'greater'
         elif any(key in monitor_lc for key in less_keys):
             rule = 'less'

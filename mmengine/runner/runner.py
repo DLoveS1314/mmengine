@@ -337,8 +337,8 @@ class Runner:
                 'either all None or not None, but got '
                 f'test_dataloader={test_dataloader}, test_cfg={test_cfg}, '
                 f'test_evaluator={test_evaluator}')
-        self._test_dataloader = test_dataloader
-        self._test_loop = test_cfg
+        self._test_dataloader = test_dataloader ##这个永远是字典 生成的dataloader在各自的loop中  可以使用 test_dataloader =self.test_loop.dataloader调用 runner也实现了相应的属性test_dataloader()
+        self._test_loop = test_cfg ##可以为空dict() 但是不能为None
         self._test_evaluator = test_evaluator
 
         self._launcher = launcher
@@ -391,8 +391,8 @@ class Runner:
         self.message_hub = self.build_message_hub()
         # visualizer used for writing log or visualizing all kinds of data
         self.visualizer = self.build_visualizer(visualizer)
-        if self.cfg:
-            self.visualizer.add_config(self.cfg)
+        if self.cfg:#把config传到visualizer中
+            self.visualizer.add_config( self.cfg )
 
         self._load_from = load_from
         self._resume = resume
@@ -408,7 +408,10 @@ class Runner:
             # https://mmengine.readthedocs.io/zh_CN/latest/tutorials/model.html
             model.setdefault('data_preprocessor', data_preprocessor)
         self.model = self.build_model(model)
-        # wrap model
+        # Logger 里面输出model的结构
+        self.logger.info(f'model contain \n {self.model} ')
+
+        # wrap model runner 会把模型搬到gpu上
         self.model = self.wrap_model(
             self.cfg.get('model_wrapper_cfg'), self.model)
 
@@ -773,7 +776,7 @@ class Runner:
             return visualizer
 
         if isinstance(visualizer, dict):
-            # ensure visualizer containing name key
+            # ensure visualizer containing name key VisBackend会在VISUALIZERS.build(visualizer)内部被建立
             visualizer.setdefault('name', self._experiment_name)
             visualizer.setdefault('save_dir', self._log_dir)
             return VISUALIZERS.build(visualizer)
@@ -1303,8 +1306,8 @@ class Runner:
     def build_dataloader(dataloader: Union[DataLoader, Dict],
                          seed: Optional[int] = None,
                          diff_rank_seed: bool = False) -> DataLoader:
-        """Build dataloader.
-
+        """Build dataloader. 再baseloop中使用build_dataloader
+ 
         The method builds three components:
 
         - Dataset

@@ -65,7 +65,12 @@ class BaseMetric(metaclass=ABCMeta):
         """Process one batch of data samples and predictions. The processed
         results should be stored in ``self.results``, which will be used to
         compute the metrics when all batches have been processed.
+        process() 用于处理每个批次的测试数据和模型预测结果。处理结果应存放在 self.results 列表中，
+        用于在处理完所有测试数据后计算评测指标。该方法具有以下 2 个参数：
 
+        data_batch：一个批次的测试数据样本，通常直接来自与数据加载器
+
+        data_samples：对应的模型预测结果 该方法没有返回值。函数接口定义如下：
         Args:
             data_batch (Any): A batch of data from the dataloader.
             data_samples (Sequence[dict]): A batch of outputs from
@@ -75,7 +80,10 @@ class BaseMetric(metaclass=ABCMeta):
     @abstractmethod
     def compute_metrics(self, results: list) -> dict:
         """Compute the metrics from processed results.
+        compute_metrics() 用于计算评测指标，并将所评测指标存放在一个字典中返回。该方法有以下 1 个参数：
 
+        results：列表类型，存放了所有批次测试数据经过 process() 方法处理后得到的结果 该方法返回一个字典，
+        里面保存了评测指标的名称和对应的评测值。函数接口定义如下：
         Args:
             results (list): The processed results of each batch.
 

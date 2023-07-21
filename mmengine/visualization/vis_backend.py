@@ -380,7 +380,8 @@ class WandbVisBackend(BaseVisBackend):
         self._commit = commit
         self._log_code_name = log_code_name
         self._watch_kwargs = watch_kwargs if watch_kwargs is not None else {}
-
+    #  force_init_env魔法方法，的时候 会强制调用 _init_env  Visualizer 的__init__里建立vis_backend 会把save_dir 传进来，
+    #  save_dir = osp.join(save_dir, 'vis_data') 但是没有传wandb需要的name名称 , 导致上传云端的名字随意取的
     def _init_env(self):
         """Setup env for wandb."""
         if not os.path.exists(self._save_dir):
