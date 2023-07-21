@@ -1,6 +1,6 @@
 # Registry
 
-OpenMMLab supports a rich collection of algorithms and datasets, therefore, many modules with similar functionality are implemented. For example, the implementations of `ResNet` and `SE-ResNet` are based on the classes `ResNet` and `SEResNet`, respectively, which have similar functions and interfaces and belong to the model components of the algorithm library. To manage these functionally similar modules, MMEngine implements the [registry](mmengine.registry.Registry). Most of the algorithm libraries in OpenMMLab use `registry` to manage their modules, including [MMDetection](https://github.com/open-mmlab/mmdetection), [MMDetection3D](https://github.com/open-mmlab/mmdetection3d), [MMClassification](https://github.com/open-mmlab/mmclassification) and [MMEditing](https://github.com/open-mmlab/mmediting), etc.
+OpenMMLab supports a rich collection of algorithms and datasets, therefore, many modules with similar functionality are implemented. For example, the implementations of `ResNet` and `SE-ResNet` are based on the classes `ResNet` and `SEResNet`, respectively, which have similar functions and interfaces and belong to the model components of the algorithm library. To manage these functionally similar modules, MMEngine implements the [registry](mmengine.registry.Registry). Most of the algorithm libraries in OpenMMLab use `registry` to manage their modules, including [MMDetection](https://github.com/open-mmlab/mmdetection), [MMDetection3D](https://github.com/open-mmlab/mmdetection3d), [MMPretrain](https://github.com/open-mmlab/mmpretrain) and [MMagic](https://github.com/open-mmlab/MMagic), etc.
 
 ## What is a registry
 
@@ -270,6 +270,38 @@ input = torch.randn(2)
 output = model(input)
 # call RReLU.forward
 print(output)
+```
+
+### How does the parent node know about child registry?
+
+When working in our `MMAlpha` it might be necessary to use the `Runner` class defined in MMENGINE. This class is in charge of building most of the objects. If these objects are added to the child registry (`MMAlpha`), how is  `MMEngine` able to find them? It cannot, `MMEngine` needs to switch to the Registry from `MMEngine` to `MMAlpha` according to the scope which is defined in default_runtime.py for searching the target class.
+
+We can also init the scope accordingly, see example below:
+
+```python
+from mmalpha.registry import MODELS
+from mmengine.registry import MODELS as MMENGINE_MODELS
+from mmengine.registry import init_default_scope
+import torch.nn as nn
+
+@MODELS.register_module()
+class LogSoftmax(nn.Module):
+    def __init__(self, dim=None):
+        super().__init__()
+
+    def forward(self, x):
+        print('call LogSoftmax.forward')
+        return x
+
+# Works because we are using mmalpha registry
+MODELS.build(dict(type="LogSoftmax"))
+
+# Fails because mmengine registry does not know about stuff registered in mmalpha
+MMENGINE_MODELS.build(dict(type="LogSoftmax"))
+
+# Works because we are using mmalpha registry
+init_default_scope('mmalpha')
+MMENGINE_MODELS.build(dict(type="LogSoftmax"))
 ```
 
 ### Use the module of a sibling node

@@ -10,7 +10,8 @@ import torch.nn as nn
 
 from mmengine.dist import master_only
 from mmengine.logging import MMLogger, print_log
-from .weight_init import initialize, update_init_info
+from .weight_init import PretrainedInit, initialize, update_init_info
+from .wrappers.utils import is_model_wrapper
 
 
 class BaseModule(nn.Module, metaclass=ABCMeta):
@@ -115,7 +116,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                 pretrained_cfg = []
                 for init_cfg in init_cfgs:
                     assert isinstance(init_cfg, dict)
-                    if init_cfg['type'] == 'Pretrained':
+                    if (init_cfg['type'] == 'Pretrained'
+                            or init_cfg['type'] is PretrainedInit):
                         pretrained_cfg.append(init_cfg)
                     else:
                         other_cfgs.append(init_cfg)
@@ -123,6 +125,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                 initialize(self, other_cfgs)
 
             for m in self.children():
+                if is_model_wrapper(m) and not hasattr(m, 'init_weights'):
+                    m = m.module
                 if hasattr(m, 'init_weights'):
                     m.init_weights()
                     # users may overload the `init_weights`

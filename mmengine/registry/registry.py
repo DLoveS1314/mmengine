@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from mmengine.config.utils import MODULE2PACKAGE
-from mmengine.utils import is_seq_of
+from mmengine.utils import get_object_from_string, is_seq_of
 from .default_scope import DefaultScope
 
 
@@ -345,10 +345,9 @@ class Registry:
                     f'`{self.scope}.utils.register_all_modules` '
                     'instead.',
                     logger='current',
-                    level=logging.WARNING)
+                    level=logging.DEBUG)
                 try:
                     module = import_module(f'{self.scope}.utils')
-                    module.register_all_modules(False)  # type: ignore
                 except (ImportError, AttributeError, ModuleNotFoundError):
                     if self.scope in MODULE2PACKAGE:
                         print_log(
@@ -366,29 +365,31 @@ class Registry:
                             'have registered the module manually.',
                             logger='current',
                             level=logging.WARNING)
+                else:
+                    # The import errors triggered during the registration
+                    # may be more complex, here just throwing
+                    # the error to avoid causing more implicit registry errors
+                    # like `xxx`` not found in `yyy` registry.
+                    module.register_all_modules(False)  # type: ignore
 
             for loc in self._locations:
-                try:
-                    import_module(loc)
-                    print_log(
-                        f"Modules of {self.scope}'s {self.name} registry have "
-                        f'been automatically imported from {loc}',
-                        logger='current',
-                        level=logging.DEBUG)
-                except (ImportError, AttributeError, ModuleNotFoundError):
-                    print_log(
-                        f'Failed to import {loc}, please check the '
-                        f'location of the registry {self.name} is '
-                        'correct.',
-                        logger='current',
-                        level=logging.WARNING)
+                import_module(loc)
+                print_log(
+                    f"Modules of {self.scope}'s {self.name} registry have "
+                    f'been automatically imported from {loc}',
+                    logger='current',
+                    level=logging.DEBUG)
             self._imported = True
 
     def get(self, key: str) -> Optional[Type]:
         """Get the registry record.
 
-        The method will first parse :attr:`key` and check whether it contains
-        a scope name. The logic to search for :attr:`key`:
+        If `key`` represents the whole object name with its module
+        information, for example, `mmengine.model.BaseModel`, ``get``
+        will directly return the class object :class:`BaseModel`.
+
+        Otherwise, it will first parse ``key`` and check whether it
+        contains a scope name. The logic to search for ``key``:
 
         - ``key`` does not contain a scope name, i.e., it is purely a module
           name like "ResNet": :meth:`get` will search for ``ResNet`` from the
@@ -435,6 +436,11 @@ class Registry:
         """
         # Avoid circular import
         from ..logging import print_log
+
+        if not isinstance(key, str):
+            raise TypeError(
+                'The key argument of `Registry.get` must be a str, '
+                f'got {type(key)}')
 
         scope, real_key = self.split_scope_key(key)
         obj_cls = None
@@ -489,12 +495,28 @@ class Registry:
                 else:
                     obj_cls = root.get(key)
 
+        if obj_cls is None:
+            # Actually, it's strange to implement this `try ... except` to
+            # get the object by its name in `Registry.get`. However, If we
+            # want to build the model using a configuration like
+            # `dict(type='mmengine.model.BaseModel')`, which can
+            # be dumped by lazy import config, we need this code snippet
+            # for `Registry.get` to work.
+            try:
+                obj_cls = get_object_from_string(key)
+            except Exception:
+                raise RuntimeError(f'Failed to get {key}')
+
         if obj_cls is not None:
+            # For some rare cases (e.g. obj_cls is a partial function), obj_cls
+            # doesn't have `__name__`. Use default value to prevent error
+            cls_name = getattr(obj_cls, '__name__', str(obj_cls))
             print_log(
-                f'Get class `{obj_cls.__name__}` from "{registry_name}"'
+                f'Get class `{cls_name}` from "{registry_name}"'
                 f' registry in "{scope_name}"',
                 logger='current',
                 level=logging.DEBUG)
+
         return obj_cls
 
     def _search_child(self, scope: str) -> Optional['Registry']:
@@ -568,16 +590,16 @@ class Registry:
         """Register a module.
 
         Args:
-            module (type): Module class or function to be registered.
+            module (type): Module to be registered. Typically a class or a
+                function, but generally all ``Callable`` are acceptable.
             module_name (str or list of str, optional): The module name to be
                 registered. If not specified, the class name will be used.
                 Defaults to None.
             force (bool): Whether to override an existing class with the same
                 name. Defaults to False.
         """
-        if not inspect.isclass(module) and not inspect.isfunction(module):
-            raise TypeError('module must be a class or a function, '
-                            f'but got {type(module)}')
+        if not callable(module):
+            raise TypeError(f'module must be Callable, but got {type(module)}')
 
         if module_name is None:
             module_name = module.__name__

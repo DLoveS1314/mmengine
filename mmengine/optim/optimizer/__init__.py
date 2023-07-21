@@ -1,6 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from ._deepspeed import DeepSpeedOptimWrapper
 from .amp_optimizer_wrapper import AmpOptimWrapper
 from .apex_optimizer_wrapper import ApexOptimWrapper
+from .base import BaseOptimWrapper
 from .builder import (OPTIM_WRAPPER_CONSTRUCTORS, OPTIMIZERS,
                       build_optim_wrapper)
 from .default_constructor import DefaultOptimWrapperConstructor
@@ -12,5 +14,5 @@ __all__ = [
     'OPTIM_WRAPPER_CONSTRUCTORS', 'OPTIMIZERS',
     'DefaultOptimWrapperConstructor', 'build_optim_wrapper', 'OptimWrapper',
     'AmpOptimWrapper', 'ApexOptimWrapper', 'OptimWrapperDict',
-    'ZeroRedundancyOptimizer'
+    'ZeroRedundancyOptimizer', 'BaseOptimWrapper', 'DeepSpeedOptimWrapper'
 ]

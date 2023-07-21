@@ -89,8 +89,14 @@ jobs:
           name: Install unit tests dependencies
           command: |
             pip install -r requirements/tests.txt
-            pip install openmim
-            mim install 'mmcv>=2.0.0rc1'
+      - run:
+          name: Install mmcv
+          command: |
+            export PYTORCH=<< parameters.torch >>
+            if [[ "${PYTORCH}" > "1.8.0" || "${PYTORCH}" == "1.8.0" ]]; then
+              pip install openmim
+              mim install mmcv
+            fi
       - run:
           name: Run unittests
           command: |
@@ -104,7 +110,7 @@ jobs:
         type: string
       cuda:
         type: enum
-        enum: ["10.1", "10.2", "11.1"]
+        enum: ["10.1", "10.2", "11.1", "11.7"]
       cudnn:
         type: integer
         default: 7
@@ -118,7 +124,7 @@ jobs:
           name: Build Docker image
           command: |
             docker build .circleci/docker -t mmengine:gpu --build-arg PYTORCH=<< parameters.torch >> --build-arg CUDA=<< parameters.cuda >> --build-arg CUDNN=<< parameters.cudnn >>
-            docker run --gpus all -t -d -v /home/circleci/project:/mmengine -w /mmengine --name mmengine mmengine:gpu
+            docker run --gpus all -t -d -v /home/circleci/project:/mmengine -e PYTORCH=<< parameters.torch >> -w /mmengine --name mmengine mmengine:gpu
       - run:
           name: Build MMEngine from source
           command: |
@@ -127,8 +133,13 @@ jobs:
           name: Install unit tests dependencies
           command: |
             docker exec mmengine pip install -r requirements/tests.txt
-            docker exec mmengine pip install openmim
-            docker exec mmengine mim install 'mmcv>=2.0.0rc1'
+      - run:
+          name: Install mmcv
+          command: |
+            if [[ "${PYTORCH}" > "1.8.0" || "${PYTORCH}" == "1.8.0" ]]; then
+              docker exec mmengine pip install openmim
+              docker exec mmengine mim install mmcv
+            fi
       - run:
           name: Run unittests
           command: |
@@ -163,7 +174,7 @@ jobs:
           command: |
             docker exec mmengine pip install -r requirements/tests.txt
             docker exec mmengine pip install openmim
-            docker exec mmengine mim install 'mmcv>=2.0.0rc1'
+            docker exec mmengine mim install mmcv
       - run:
           name: Install down stream repositories
           command: |
@@ -219,8 +230,8 @@ workflows:
             - lint
       - build_cpu:
           name: maximum_version_cpu
-          torch: 1.13.0
-          torchvision: 0.14.0
+          torch: 2.0.0
+          torchvision: 0.15.1
           python: 3.9.0
           requires:
             - minimum_version_cpu
@@ -244,6 +255,13 @@ workflows:
           # Use double quotation mark to explicitly specify its type
           # as string instead of number
           cuda: "10.2"
+          requires:
+            - hold
+      - build_cuda:
+          name: maximum_version_gpu
+          torch: 2.0.0
+          cuda: "11.7"
+          cudnn: 8
           requires:
             - hold
   merge_stage_test:

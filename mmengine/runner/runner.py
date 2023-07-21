@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 
 import mmengine
 from mmengine.config import Config, ConfigDict
-from mmengine.dataset import worker_init_fn
+from mmengine.dataset import worker_init_fn as default_worker_init_fn
 from mmengine.device import get_device
 from mmengine.dist import (broadcast, get_dist_info, get_rank, init_dist,
                            is_distributed, master_only)
@@ -29,20 +29,22 @@ from mmengine.hooks import Hook
 from mmengine.logging import MessageHub, MMLogger, print_log
 from mmengine.model import (MMDistributedDataParallel, convert_sync_batchnorm,
                             is_model_wrapper, revert_sync_batchnorm)
+from mmengine.model.efficient_conv_bn_eval import \
+    turn_on_efficient_conv_bn_eval
 from mmengine.optim import (OptimWrapper, OptimWrapperDict, _ParamScheduler,
                             build_optim_wrapper)
 from mmengine.registry import (DATA_SAMPLERS, DATASETS, EVALUATOR, FUNCTIONS,
                                HOOKS, LOG_PROCESSORS, LOOPS, MODEL_WRAPPERS,
                                MODELS, OPTIM_WRAPPERS, PARAM_SCHEDULERS,
                                RUNNERS, VISUALIZERS, DefaultScope)
-from mmengine.utils import digit_version, get_git_hash, is_seq_of
+from mmengine.utils import apply_to, digit_version, get_git_hash, is_seq_of
 from mmengine.utils.dl_utils import (TORCH_VERSION, collect_env,
                                      set_multi_processing)
 from mmengine.visualization import Visualizer
 from .base_loop import BaseLoop
 from .checkpoint import (_load_checkpoint, _load_checkpoint_to_model,
-                         find_latest_checkpoint, get_state_dict,
-                         save_checkpoint, weights_to_cpu)
+                         find_latest_checkpoint, save_checkpoint,
+                         weights_to_cpu)
 from .log_processor import LogProcessor
 from .loops import EpochBasedTrainLoop, IterBasedTrainLoop, TestLoop, ValLoop
 from .priority import Priority, get_priority
@@ -367,8 +369,12 @@ class Runner:
         mmengine.mkdir_or_exist(self._log_dir)
         # Used to reset registries location. See :meth:`Registry.build` for
         # more details.
-        self.default_scope = DefaultScope.get_instance(
-            self._experiment_name, scope_name=default_scope)
+        if default_scope is not None:
+            default_scope = DefaultScope.get_instance(  # type: ignore
+                self._experiment_name,
+                scope_name=default_scope)
+        self.default_scope = default_scope
+
         # Build log processor to format message.
         log_processor = dict() if log_processor is None else log_processor
         self.log_processor = self.build_log_processor(log_processor)
@@ -723,6 +729,11 @@ class Runner:
 
         log_cfg = dict(log_level=log_level, log_file=log_file, **kwargs)
         log_cfg.setdefault('name', self._experiment_name)
+        # `torch.compile` in PyTorch 2.0 could close all user defined handlers
+        # unexpectedly. Using file mode 'a' can help prevent abnormal
+        # termination of the FileHandler and ensure that the log file could
+        # be continuously updated during the lifespan of the runner.
+        log_cfg.setdefault('file_mode', 'a')
 
         return MMLogger.get_instance(**log_cfg)  # type: ignore
 
@@ -821,7 +832,7 @@ class Runner:
     def wrap_model(
             self, model_wrapper_cfg: Optional[Dict],
             model: nn.Module) -> Union[DistributedDataParallel, nn.Module]:
-        """Wrap the model to :obj:``MMDistributedDataParallel`` or other custom
+        """Wrap the model to :obj:`MMDistributedDataParallel` or other custom
         distributed data-parallel module wrappers.
 
         An example of ``model_wrapper_cfg``::
@@ -880,6 +891,7 @@ class Runner:
                 broadcast_buffers=False,
                 find_unused_parameters=find_unused_parameters)
         else:
+            model_wrapper_cfg.setdefault('type', 'MMDistributedDataParallel')
             model_wrapper_type = MODEL_WRAPPERS.get(
                 model_wrapper_cfg.get('type'))  # type: ignore
             default_args: dict = dict()
@@ -1383,21 +1395,35 @@ class Runner:
         # build dataloader
         init_fn: Optional[partial]
 
-        if seed is not None:
-            disable_subprocess_warning = dataloader_cfg.pop(
-                'disable_subprocess_warning', False)
-            assert isinstance(
-                disable_subprocess_warning,
-                bool), ('disable_subprocess_warning should be a bool, but got '
-                        f'{type(disable_subprocess_warning)}')
-            init_fn = partial(
-                worker_init_fn,
-                num_workers=dataloader_cfg.get('num_workers'),
-                rank=get_rank(),
-                seed=seed,
-                disable_subprocess_warning=disable_subprocess_warning)
+        if 'worker_init_fn' in dataloader_cfg:
+            worker_init_fn_cfg = dataloader_cfg.pop('worker_init_fn')
+            worker_init_fn_type = worker_init_fn_cfg.pop('type')
+            if isinstance(worker_init_fn_type, str):
+                worker_init_fn = FUNCTIONS.get(worker_init_fn_type)
+            elif callable(worker_init_fn_type):
+                worker_init_fn = worker_init_fn_type
+            else:
+                raise TypeError(
+                    'type of worker_init_fn should be string or callable '
+                    f'object, but got {type(worker_init_fn_type)}')
+            assert callable(worker_init_fn)
+            init_fn = partial(worker_init_fn,
+                              **worker_init_fn_cfg)  # type: ignore
         else:
-            init_fn = None
+            if seed is not None:
+                disable_subprocess_warning = dataloader_cfg.pop(
+                    'disable_subprocess_warning', False)
+                assert isinstance(disable_subprocess_warning, bool), (
+                    'disable_subprocess_warning should be a bool, but got '
+                    f'{type(disable_subprocess_warning)}')
+                init_fn = partial(
+                    default_worker_init_fn,
+                    num_workers=dataloader_cfg.get('num_workers'),
+                    rank=get_rank(),
+                    seed=seed,
+                    disable_subprocess_warning=disable_subprocess_warning)
+            else:
+                init_fn = None
 
         # `persistent_workers` requires pytorch version >= 1.7
         if ('persistent_workers' in dataloader_cfg
@@ -1416,9 +1442,19 @@ class Runner:
         # samples into a dict without stacking the batch tensor.
         collate_fn_cfg = dataloader_cfg.pop('collate_fn',
                                             dict(type='pseudo_collate'))
-        collate_fn_type = collate_fn_cfg.pop('type')
-        collate_fn = FUNCTIONS.get(collate_fn_type)
-        collate_fn = partial(collate_fn, **collate_fn_cfg)  # type: ignore
+        if isinstance(collate_fn_cfg, dict):
+            collate_fn_type = collate_fn_cfg.pop('type')
+            if isinstance(collate_fn_type, str):
+                collate_fn = FUNCTIONS.get(collate_fn_type)
+            else:
+                collate_fn = collate_fn_type
+            collate_fn = partial(collate_fn, **collate_fn_cfg)  # type: ignore
+        elif callable(collate_fn_cfg):
+            collate_fn = collate_fn_cfg
+        else:
+            raise TypeError(
+                'collate_fn should be a dict or callable object, but got '
+                f'{collate_fn_cfg}')
         data_loader = DataLoader(
             dataset=dataset,
             sampler=sampler if batch_sampler is None else None,
@@ -1454,7 +1490,7 @@ class Runner:
             return loop
         elif not isinstance(loop, dict):
             raise TypeError(
-                f'loop should be a Loop object or dict, but got {loop}')
+                f'train_loop should be a Loop object or dict, but got {loop}')
 
         loop_cfg = copy.deepcopy(loop)
 
@@ -1500,7 +1536,7 @@ class Runner:
             return loop
         elif not isinstance(loop, dict):
             raise TypeError(
-                f'train_loop should be a Loop object or dict, but got {loop}')
+                f'val_loop should be a Loop object or dict, but got {loop}')
 
         loop_cfg = copy.deepcopy(loop)
 
@@ -1542,7 +1578,7 @@ class Runner:
             return loop
         elif not isinstance(loop, dict):
             raise TypeError(
-                f'train_loop should be a Loop object or dict, but got {loop}')
+                f'test_loop should be a Loop object or dict, but got {loop}')
 
         loop_cfg = copy.deepcopy(loop)  # type: ignore
 
@@ -1692,6 +1728,14 @@ class Runner:
 
         # initialize the model weights
         self._init_model_weights()
+
+        # try to enable efficient_conv_bn_eval feature
+        modules = self.cfg.get('efficient_conv_bn_eval', None)
+        if modules is not None:
+            self.logger.info(f'Enabling the "efficient_conv_bn_eval" feature'
+                             f' for sub-modules: {modules}')
+            turn_on_efficient_conv_bn_eval(ori_model, modules)
+
         # make sure checkpoint-related hooks are triggered after `before_run`
         self.load_or_resume()
 
@@ -1962,16 +2006,21 @@ class Runner:
             if (previous_gpu_ids is not None and len(previous_gpu_ids) > 0
                     and len(previous_gpu_ids) != self._world_size):
                 # TODO, should we modify the iteration?
-                self.logger.info(
-                    'Number of GPU used for current experiment is not '
-                    'consistent with resuming from checkpoint')
                 if (self.auto_scale_lr is None
                         or not self.auto_scale_lr.get('enable', False)):
                     raise RuntimeError(
-                        'Cannot automatically rescale lr in resuming. Please '
-                        'make sure the number of GPU is consistent with the '
-                        'previous training state resuming from the checkpoint '
-                        'or set `enable` in `auto_scale_lr to False.')
+                        'Number of GPUs used for current experiment is not '
+                        'consistent with the checkpoint being resumed from. '
+                        'This will result in poor performance due to the '
+                        'learning rate. You must set the '
+                        '`auto_scale_lr` parameter for Runner and make '
+                        '`auto_scale_lr["enable"]=True`.')
+                else:
+                    self.logger.info(
+                        'Number of GPU used for current experiment is not '
+                        'consistent with resuming from checkpoint but the '
+                        'leaning rate will be adjusted according to the '
+                        f'setting in auto_scale_lr={self.auto_scale_lr}')
 
         # resume random seed
         resumed_seed = checkpoint['meta'].get('seed', None)
@@ -2077,7 +2126,7 @@ class Runner:
         file_client_args: Optional[dict] = None,
         save_optimizer: bool = True,
         save_param_scheduler: bool = True,
-        meta: dict = None,
+        meta: Optional[dict] = None,
         by_epoch: bool = True,
         backend_args: Optional[dict] = None,
     ):
@@ -2099,8 +2148,8 @@ class Runner:
                 to the checkpoint. Defaults to True.
             meta (dict, optional): The meta information to be saved in the
                 checkpoint. Defaults to None.
-            by_epoch (bool): Whether the scheduled momentum is updated by
-                epochs. Defaults to True.
+            by_epoch (bool): Decide the number of epoch or iteration saved in
+                checkpoint. Defaults to True.
             backend_args (dict, optional): Arguments to instantiate the
                 prefix of uri corresponding backend. Defaults to None.
                 New in v0.2.0.
@@ -2116,9 +2165,11 @@ class Runner:
             # `self.call_hook('after_train_epoch)` but `save_checkpoint` is
             # called by `after_train_epoch`` method of `CheckpointHook` so
             # `epoch` should be `self.epoch + 1`
-            meta.update(epoch=self.epoch + 1, iter=self.iter)
+            meta.setdefault('epoch', self.epoch + 1)
+            meta.setdefault('iter', self.iter)
         else:
-            meta.update(epoch=self.epoch, iter=self.iter + 1)
+            meta.setdefault('epoch', self.epoch)
+            meta.setdefault('iter', self.iter + 1)
 
         if file_client_args is not None:
             warnings.warn(
@@ -2151,14 +2202,20 @@ class Runner:
             model = self.model
 
         checkpoint = {
-            'meta': meta,
-            'state_dict': weights_to_cpu(get_state_dict(model)),
-            'message_hub': self.message_hub.state_dict()
+            'meta':
+            meta,
+            'state_dict':
+            weights_to_cpu(model.state_dict()),
+            'message_hub':
+            apply_to(self.message_hub.state_dict(),
+                     lambda x: hasattr(x, 'cpu'), lambda x: x.cpu()),
         }
         # save optimizer state dict to checkpoint
         if save_optimizer:
             if isinstance(self.optim_wrapper, OptimWrapper):
-                checkpoint['optimizer'] = self.optim_wrapper.state_dict()
+                checkpoint['optimizer'] = apply_to(
+                    self.optim_wrapper.state_dict(),
+                    lambda x: hasattr(x, 'cpu'), lambda x: x.cpu())
             else:
                 raise TypeError(
                     'self.optim_wrapper should be an `OptimWrapper` '
@@ -2186,7 +2243,11 @@ class Runner:
                     checkpoint['param_schedulers'].append(state_dict)
 
         self.call_hook('before_save_checkpoint', checkpoint=checkpoint)
-        save_checkpoint(checkpoint, filepath)
+        save_checkpoint(
+            checkpoint,
+            filepath,
+            file_client_args=file_client_args,
+            backend_args=backend_args)
 
     @master_only
     def dump_config(self) -> None:
@@ -2240,7 +2301,6 @@ class Runner:
         Args:
             param_scheduler (dict or list): The original parameter scheduler.
         """  # noqa: E501
-        param_schedulers: Union[dict, list, _ParamScheduler]
         if param_scheduler is None:
             return
         if isinstance(param_scheduler, _ParamScheduler):
@@ -2284,6 +2344,7 @@ class Runner:
         runtime_env = OrderedDict()
         runtime_env.update(env_cfg)
         runtime_env.update(self._randomness_cfg)
+        runtime_env['seed'] = self._seed
         runtime_env['Distributed launcher'] = self._launcher
         runtime_env['Distributed training'] = self._distributed
         runtime_env['GPU number'] = self._world_size
@@ -2297,7 +2358,9 @@ class Runner:
                          env_info + '\n'
                          '\nRuntime environment:' + runtime_env_info + '\n' +
                          dash_line + '\n')
-        self.logger.info(f'Config:\n{self.cfg.pretty_text}')
+
+        if self.cfg._cfg_dict:
+            self.logger.info(f'Config:\n{self.cfg.pretty_text}')
 
     def _maybe_compile(self, target: str) -> None:
         """Use `torch.compile` to optimize model/wrapped_model."""
