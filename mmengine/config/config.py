@@ -1,6 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import ast
 import copy
+import difflib
 import os
 import os.path as osp
 import platform
@@ -17,12 +18,15 @@ from pathlib import Path
 from typing import Any, Optional, Sequence, Tuple, Union
 
 from addict import Dict
+from rich.console import Console
+from rich.text import Text
 from yapf.yapflib.yapf_api import FormatCode
 
 from mmengine.fileio import dump, load
 from mmengine.logging import print_log
-from mmengine.utils import (check_file_exist, get_installed_path,
-                            import_modules_from_strings, is_installed)
+from mmengine.utils import (check_file_exist, digit_version,
+                            get_installed_path, import_modules_from_strings,
+                            is_installed)
 from .lazy import LazyAttr, LazyObject
 from .utils import (ConfigParsingError, ImportTransformer, RemoveAssignFromAST,
                     _gather_abs_import_lazyobj, _get_external_cfg_base_path,
@@ -261,15 +265,18 @@ class ConfigDict(Dict):
         for key, value in merged.items():
             self[key] = value
 
-    def __getstate__(self):
-        state = {}
-        for key, value in super().items():
-            state[key] = value
-        return state
-
-    def __setstate__(self, state):
-        for key, value in state.items():
-            self[key] = value
+    def __reduce_ex__(self, proto):
+        # Override __reduce_ex__ to avoid `self.items` will be
+        # called by CPython interpreter during pickling. See more details in
+        # https://github.com/python/cpython/blob/8d61a71f9c81619e34d4a30b625922ebc83c561b/Objects/typeobject.c#L6196  # noqa: E501
+        if digit_version(platform.python_version()) < digit_version('3.8'):
+            return (self.__class__, ({k: v
+                                      for k, v in super().items()}, ), None,
+                    None, None)
+        else:
+            return (self.__class__, ({k: v
+                                      for k, v in super().items()}, ), None,
+                    None, None, None)
 
     def __eq__(self, other):
         if isinstance(other, ConfigDict):
@@ -903,7 +910,7 @@ class Config:
                         parsed_codes = ast.parse(f.read())
                         parsed_codes = RemoveAssignFromAST(BASE_KEY).visit(
                             parsed_codes)
-                    codeobj = compile(parsed_codes, '', mode='exec')
+                    codeobj = compile(parsed_codes, filename, mode='exec')
                     # Support load global variable in nested function of the
                     # config.
                     global_locals_var = {BASE_KEY: base_cfg_dict}
@@ -1221,8 +1228,9 @@ class Config:
             cfg_dict = mmengine.load(filename)
             base_files = cfg_dict.get(BASE_KEY, [])
         else:
-            raise TypeError('The config type should be py, json, yaml or '
-                            f'yml, but got {file_format}')
+            raise ConfigParsingError(
+                'The config type should be py, json, yaml or '
+                f'yml, but got {file_format}')
         base_files = base_files if isinstance(base_files,
                                               list) else [base_files]
         return base_files
@@ -1432,7 +1440,8 @@ class Config:
             use_mapping = _contain_invalid_identifier(input_dict)
             if use_mapping:
                 r += '{'
-            for idx, (k, v) in enumerate(input_dict.items()):
+            for idx, (k, v) in enumerate(
+                    sorted(input_dict.items(), key=lambda x: str(x[0]))):
                 is_last = idx >= len(input_dict) - 1
                 end = '' if outest_level or is_last else ','
                 if isinstance(v, dict):
@@ -1604,6 +1613,36 @@ class Config:
             '_cfg_dict',
             Config._merge_a_into_b(
                 option_cfg_dict, cfg_dict, allow_list_keys=allow_list_keys))
+
+    @staticmethod
+    def diff(cfg1: Union[str, 'Config'], cfg2: Union[str, 'Config']) -> str:
+        if isinstance(cfg1, str):
+            cfg1 = Config.fromfile(cfg1)
+
+        if isinstance(cfg2, str):
+            cfg2 = Config.fromfile(cfg2)
+
+        res = difflib.unified_diff(
+            cfg1.pretty_text.split('\n'), cfg2.pretty_text.split('\n'))
+
+        # Convert into rich format for better visualization
+        console = Console()
+        text = Text()
+        for line in res:
+            if line.startswith('+'):
+                color = 'bright_green'
+            elif line.startswith('-'):
+                color = 'bright_red'
+            else:
+                color = 'bright_white'
+            _text = Text(line + '\n')
+            _text.stylize(color)
+            text.append(_text)
+
+        with console.capture() as capture:
+            console.print(text)
+
+        return capture.get()
 
     @staticmethod
     def _is_lazy_import(filename: str) -> bool:

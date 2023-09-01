@@ -58,9 +58,13 @@
 
 ## 最近进展
 
-最新版本 v0.8.0 在 2023.06.30 发布。
+最新版本 v0.8.4 在 2023.08.03 发布。
 
 亮点：
+
+- 支持使用 `efficient_conv_bn_eval` 参数开启更高效的 `ConvBN` 推理模式。详见[节省显存文档](https://mmengine.readthedocs.io/zh_CN/latest/common_usage/save_gpu_memory.html)
+
+- 新增微调 Llama2 的[示例](./examples/llama2/)。
 
 - 支持使用 [FSDP](https://pytorch.org/tutorials/intermediate/FSDP_adavnced_tutorial.html?highlight=fsdp) 和 [DeepSpeed](https://www.deepspeed.ai/) 进行训练。可阅读[大模型训练](https://mmengine.readthedocs.io/zh_cn/latest/common_usage/large_model_training.html)了解用法。
 
@@ -76,7 +80,7 @@
 
   ![new-config-zh_cn](https://github.com/open-mmlab/mmengine/assets/57566630/c2da9a73-c911-4f78-8253-e3f29496d9f8)
 
-如果想了解更多版本更新细节和历史信息，请阅读[更新日志](./docs/en/notes/changelog.md#v080-06302023)
+如果想了解更多版本更新细节和历史信息，请阅读[更新日志](./docs/en/notes/changelog.md#v083-08032023)
 
 ## 目录
 
@@ -358,6 +362,7 @@ runner.train()
 ## 生态项目
 
 - [APES: Attention-based Point Cloud Edge Sampling](https://github.com/JunweiZheng93/APES)
+- [DiffEngine: diffusers training toolbox with mmengine](https://github.com/okotaku/diffengine)
 
 ## OpenMMLab 的其他项目
 
@@ -385,10 +390,10 @@ runner.train()
 
 ## 欢迎加入 OpenMMLab 社区
 
-扫描下方的二维码可关注 OpenMMLab 团队的 [知乎官方账号](https://www.zhihu.com/people/openmmlab)，加入 OpenMMLab 团队的 [官方交流 QQ 群](https://jq.qq.com/?_wv=1027&k=K0QI8ByU)，或通过添加微信“Open小喵Lab”加入官方交流微信群。
+扫描下方的二维码可关注 OpenMMLab 团队的 [知乎官方账号](https://www.zhihu.com/people/openmmlab)，扫描下方微信二维码添加喵喵好友，进入 MMEngine 微信交流社群。【加好友申请格式：研究方向+地区+学校/公司+姓名】
 
 <div align="center">
-<img src="https://user-images.githubusercontent.com/58739961/187154320-f3312cdf-31f2-4316-9dbb-8d7b0e1b7e08.jpg" height="400" />  <img src="https://user-images.githubusercontent.com/25839884/203904835-62392033-02d4-4c73-a68c-c9e4c1e2b07f.jpg" height="400" />  <img src="https://user-images.githubusercontent.com/58739961/187151778-d17c1368-125f-4fde-adbe-38cc6eb3be98.jpg" height="400" />
+<img src="https://user-images.githubusercontent.com/58739961/187154320-f3312cdf-31f2-4316-9dbb-8d7b0e1b7e08.jpg" height="400" />  <img src="https://github.com/open-mmlab/mmengine/assets/62195058/bd482538-1b1a-4130-af1b-ed788b6cafa8" height="400" />
 </div>
 
 我们会在 OpenMMLab 社区为大家

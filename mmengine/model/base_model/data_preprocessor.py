@@ -294,7 +294,7 @@ class ImgDataPreprocessor(BaseDataPreprocessor):
         else:
             raise TypeError('Output of `cast_data` should be a dict of '
                             'list/tuple with inputs and data_samples, '
-                            f'but got {type(data)}： {data}')
+                            f'but got {type(data)}: {data}')
         data['inputs'] = batch_inputs
         ## 为了防止没有‘data_samples’ 参数而导致后续的问题 这里加了一句setdefault
         #  如果字典中已经存在这个key，setdefault不会修改key原来的值，而且该方法会返回key原来的值
